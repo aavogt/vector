@@ -1,3 +1,5 @@
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE CPP, DeriveDataTypeable, FlexibleInstances, MultiParamTypeClasses, TypeFamilies, ScopedTypeVariables, Rank2Types #-}
 
 -- |
@@ -135,7 +137,8 @@ module Data.Vector.Primitive (
 ) where
 
 import qualified Data.Vector.Generic           as G
-import           Data.Vector.Primitive.Mutable ( MVector(..) )
+import qualified Data.Vector.Generic.Mutable   as GM
+import           Data.Vector.Primitive.Mutable ( MVectorT(..) )
 import qualified Data.Vector.Fusion.Bundle as Bundle
 import           Data.Primitive.ByteArray
 import           Data.Primitive ( Prim, sizeOf )
@@ -194,16 +197,36 @@ instance (Data a, Prim a) => Data (Vector a) where
   dataCast1    = G.dataCast
 
 
-type instance G.Mutable Vector = MVector
+newtype instance G.Mutable Vector s a = MV_Vector (MVectorT s a)
+
+type MVector = G.Mutable Vector
+
+{- want:
+deriving instance GM.MVector MVectorT a => GM.MVector (G.Mutable Vector) a
+
+    Can't make a derived instance of ‘GM.MVector (G.Mutable Vector) a’:
+      The last argument of the instance must be a data or newtype application
+    In the stand-alone deriving instance for
+      ‘GM.MVector MVectorT a => GM.MVector (G.Mutable Vector) a’
+
+but that doesn't seem to be possible so here's the instance:
+-}
+instance GM.MVector MVectorT a => GM.MVector (G.Mutable Vector) a where
+  basicLength (MV_Vector a) = GM.basicLength a
+  basicUnsafeSlice a b (MV_Vector v) = MV_Vector (GM.basicUnsafeSlice a b v)
+  basicOverlaps (MV_Vector v) (MV_Vector v') = GM.basicOverlaps v v'
+  basicUnsafeNew n = liftM MV_Vector (GM.basicUnsafeNew n)
+  basicUnsafeRead (MV_Vector v) n = GM.basicUnsafeRead v n
+  basicUnsafeWrite (MV_Vector v) n a = GM.basicUnsafeWrite v n a
 
 instance Prim a => G.Vector Vector a where
   {-# INLINE basicUnsafeFreeze #-}
-  basicUnsafeFreeze (MVector i n marr)
+  basicUnsafeFreeze (MV_Vector (MVector i n marr))
     = Vector i n `liftM` unsafeFreezeByteArray marr
 
   {-# INLINE basicUnsafeThaw #-}
   basicUnsafeThaw (Vector i n arr)
-    = MVector i n `liftM` unsafeThawByteArray arr
+    = (MV_Vector . MVector i n) `liftM` unsafeThawByteArray arr
 
   {-# INLINE basicLength #-}
   basicLength (Vector _ n _) = n
@@ -215,7 +238,7 @@ instance Prim a => G.Vector Vector a where
   basicUnsafeIndexM (Vector i _ arr) j = return $! indexByteArray arr (i+j)
 
   {-# INLINE basicUnsafeCopy #-}
-  basicUnsafeCopy (MVector i n dst) (Vector j _ src)
+  basicUnsafeCopy (MV_Vector (MVector i n dst)) (Vector j _ src)
     = copyByteArray dst (i*sz) src (j*sz) (n*sz)
     where
       sz = sizeOf (undefined :: a)

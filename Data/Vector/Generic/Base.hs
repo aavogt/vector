@@ -26,7 +26,7 @@ import Control.Monad.Primitive
 -- | @Mutable v s a@ is the mutable version of the pure vector type @v a@ with
 -- the state token @s@
 --
-type family Mutable (v :: * -> *) :: * -> * -> *
+data family Mutable (v :: * -> *) :: * -> * -> *
 
 -- | Class of immutable vectors. Every immutable vector is associated with its
 -- mutable version through the 'Mutable' type family. Methods of this class

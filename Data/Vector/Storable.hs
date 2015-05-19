@@ -201,14 +201,14 @@ instance (Data a, Storable a) => Data (Vector a) where
   dataTypeOf _ = G.mkType "Data.Vector.Storable.Vector"
   dataCast1    = G.dataCast
 
-type instance G.Mutable Vector = MVector
+type instance G.Mutable Vector s a = SM_Vector (MVector s a)
 
 instance Storable a => G.Vector Vector a where
   {-# INLINE basicUnsafeFreeze #-}
-  basicUnsafeFreeze (MVector n fp) = return $ Vector n fp
+  basicUnsafeFreeze (MVector n fp) = return $ SM_Vector (Vector n fp)
 
   {-# INLINE basicUnsafeThaw #-}
-  basicUnsafeThaw (Vector n fp) = return $ MVector n fp
+  basicUnsafeThaw (Vector n fp) = return $ SM_Vector (MVector n fp)
 
   {-# INLINE basicLength #-}
   basicLength (Vector n _) = n
@@ -223,7 +223,7 @@ instance Storable a => G.Vector Vector a where
                                       peekElemOff p i
 
   {-# INLINE basicUnsafeCopy #-}
-  basicUnsafeCopy (MVector n fp) (Vector _ fq)
+  basicUnsafeCopy (SM_Vector (MVector n fp)) (Vector _ fq)
     = unsafePrimToPrim
     $ withForeignPtr fp $ \p ->
       withForeignPtr fq $ \q ->
